@@ -1,6 +1,9 @@
 .DS_Store
 target
 tests/snaps/**/timing.txt
-
 # Nix build outputs
 result
+.venv
+*.egg-info
+.idea
+__pycache__

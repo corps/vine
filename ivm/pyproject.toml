@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "py-ivm"
+version = "0.1.0"
+description = "A python reference implementation of ivm interaction combinator runtime"
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://vine.dev"
+Repository = "https://github.com/VineLang/vine"
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "black",
+    "mypy",
+    "flake8",
+]
+
+[tool.setuptools.packages.find]
+where = ["py"]
