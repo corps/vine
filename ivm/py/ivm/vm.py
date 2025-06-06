@@ -3,14 +3,26 @@ import sys
 from dataclasses import field
 from typing import TypeVar, Iterable
 
-from .heap import Port, Wire, WireHeap, Tag, WirePort, BinaryNodePort, CombPort, ErasePort, \
-    BranchPort, NilaryNodePort, BinaryNodePort
+from .heap import (
+    Port,
+    Wire,
+    WireHeap,
+    Tag,
+    WirePort,
+    BinaryNodePort,
+    CombPort,
+    ErasePort,
+    BranchPort,
+    NilaryNodePort,
+    BinaryNodePort,
+)
 from .globals import Global, GlobalPort, Instructions, ExecutionContext
 from .extrinsics import ExtValPort, ExtFnPort, Extrinsics
 
 _P = TypeVar("_P", bound=Port)
 _Q = TypeVar("_Q", bound=Port)
 _BP = TypeVar("_BP", bound=BinaryNodePort)
+
 
 @dataclasses.dataclass
 class IVM(ExecutionContext):
@@ -19,7 +31,7 @@ class IVM(ExecutionContext):
     active_slow: list[tuple[Port, Port]] = field(default_factory=list)
     inert: list[tuple[Port, Port]] = field(default_factory=list)
     registers: list[Port | None] = field(default_factory=list)
-    extrinsics: Extrinsics = field(default_factory=dict)
+    extrinsics: Extrinsics = field(default_factory=lambda: Extrinsics())
 
     def boot(self, g: Global, ext_val: ExtValPort):
         """
@@ -30,10 +42,7 @@ class IVM(ExecutionContext):
         is given its own port wrapper.  This generally makes it "safe" to external
         re-entry, but keep in mind any special assumptions of the ext_val.
         """
-        self.link(
-            GlobalPort(global_ref=g),
-            ext_val.fork()
-        )
+        self.link(GlobalPort(global_ref=g), ext_val.fork())
 
     def link_register(self, register: int, port: Port) -> None:
         register_port = self.registers[register]
@@ -82,23 +91,34 @@ class IVM(ExecutionContext):
             a, b = ports
             self.link_wire(a.wire, b)
             return
-        if _find_both_one_of(a, b, (GlobalPort, ErasePort)) or _find_both_one_of(a, b, (ExtValPort, ErasePort)):
+        if _find_both_one_of(a, b, (GlobalPort, ErasePort)) or _find_both_one_of(
+            a, b, (ExtValPort, ErasePort)
+        ):
             sys.audit("ivm.erase", self)
             return
-        if (ports := _find_both_are(a, b, CombPort)) or (ports := _find_both_are(a, b, ExtFnPort)):
-            if ports[0].label == ports[1].label:
-                self.active_fast.append(ports)
+        if (comb_ports := _find_both_are(a, b, BinaryNodePort)) and (
+            a.tag == b.tag == Tag.Comb or a.tag == b.tag == Tag.ExtFn
+        ):
+            if comb_ports[0].label == comb_ports[1].label:
+                self.active_fast.append(comb_ports)
                 return
-        if _find_either_is(a, b, GlobalPort) or _find_both_one_of(a, b, (CombPort, ExtFnPort, BranchPort)):
+        if _find_either_is(a, b, GlobalPort) or _find_both_one_of(
+            a, b, (CombPort, ExtFnPort, BranchPort)
+        ):
             self.active_slow.append((a, b))
             return
-        if _find_either_is(a, b, ErasePort) or _find_either_is(a, b, ExtValPort):
+        if (
+            _find_either_is(a, b, ErasePort) is not None
+            or _find_either_is(a, b, ExtValPort) is not None
+        ):
             self.active_fast.append((a, b))
             return
         assert False, "unreachable"
 
     def interact(self, a: Port, b: Port) -> None:
-        if _find_either_is(a, b, WirePort) or _find_both_one_of(a, b, (ErasePort, ExtValPort)):
+        if _find_either_is(a, b, WirePort) or _find_both_one_of(
+            a, b, (ErasePort, ExtValPort)
+        ):
             assert False, "unreachable"
         if ports1 := _find_and_orient_both(a, b, GlobalPort, CombPort):
             if not ports1[0].global_ref.contains_label(ports1[1].label):
@@ -173,7 +193,9 @@ class IVM(ExecutionContext):
             if isinstance(rhs_port, ExtValPort):
                 sys.audit("ivm.call", self)
                 self.heap.free_wire(rhs)
-                result = self.extrinsics[a.unwrap_label()](b.value, rhs_port.value)
+                result = self.extrinsics.ext_fns[a.unwrap_label()](
+                    b.value, rhs_port.value
+                )
                 self.link_wire(out, result)
                 return
 
@@ -208,7 +230,10 @@ class IVM(ExecutionContext):
 
         # Registers used twice self clear, whereas odd ones represent leak!
         for register in self.registers:
-            assert register is None, f"Found unempty register {register}, instructions did not complete cleanly"
+            assert (
+                register is None
+            ), f"Found unempty register {register}, instructions did not complete cleanly"
+
 
 def _find_either_is(a: Port, b: Port, goal: type[_P]) -> tuple[_P, Port] | None:
     if isinstance(a, goal):
@@ -217,12 +242,16 @@ def _find_either_is(a: Port, b: Port, goal: type[_P]) -> tuple[_P, Port] | None:
         return b, a
     return None
 
+
 def _find_both_are(a: Port, b: Port, goal: type[_P]) -> tuple[_P, _P] | None:
     if isinstance(a, goal) and isinstance(b, goal):
         return a, b
     return None
 
-def _find_both_one_of(a: Port, b: Port, at: Iterable[type[Port]]) -> tuple[Port, Port] | None:
+
+def _find_both_one_of(
+    a: Port, b: Port, at: Iterable[type[Port]]
+) -> tuple[Port, Port] | None:
     for t in at:
         if isinstance(a, t):
             break
@@ -233,7 +262,10 @@ def _find_both_one_of(a: Port, b: Port, at: Iterable[type[Port]]) -> tuple[Port,
             return a, b
     return None
 
-def _find_and_orient_both(a: Port, b: Port, goal_a: type[_P], goal_b: type[_Q]) -> tuple[_P, _Q] | None:
+
+def _find_and_orient_both(
+    a: Port, b: Port, goal_a: type[_P], goal_b: type[_Q]
+) -> tuple[_P, _Q] | None:
     if isinstance(a, goal_a) and isinstance(b, goal_b):
         return a, b
     if isinstance(b, goal_a) and isinstance(a, goal_b):

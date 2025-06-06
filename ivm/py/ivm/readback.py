@@ -1,11 +1,55 @@
 import dataclasses
 from dataclasses import field
+from typing import Any
 
-from .ast import Tree, N32, F32
-from .extrinsics import ExtValPort, PrimitiveExtValPort, ExtFnPort
-from .globals import Global, GlobalPort
+from .extrinsics import ExtValPort, PrimitiveExtValPort, ExtFnPort, Extrinsics
+from .globals import GlobalPort
 from .heap import Port, WirePort, ErasePort, BranchPort, Wire
+from .tree import (
+    Tree,
+    N32,
+    F32,
+    VarTree,
+    GlobalTree,
+    Erase,
+    N32Tree,
+    F32Tree,
+    ExtFnTree,
+    BranchTree,
+)
 from .vm import IVM
+
+
+class CachedExtValPort(ExtValPort):
+    serialized: Tree
+
+    def __init__(self, value: Any, tree: Tree):
+        self.serialized = tree
+        super().__init__(value=value)
+
+
+@dataclasses.dataclass
+class ExtrinsicsCache:
+    cache: list[Any] = dataclasses.field(default_factory=list)
+    ext_fn_name: str = "cache"
+
+    def __call__(self, value: Any, b: Any) -> ExtValPort:
+        assert isinstance(value, N32)
+        return CachedExtValPort(
+            self.cache[value.value],
+            ExtFnTree(
+                self.ext_fn_name, N32Tree(value, None), N32Tree(N32(0), None), None
+            ),
+        )
+
+    def add_new_val(self, val: Any) -> ExtValPort:
+        idx = N32(len(self.cache))
+        self.cache.append(val)
+        return self(idx, idx)
+
+    def install_into(self, extrinsics: Extrinsics) -> None:
+        assert self.ext_fn_name not in extrinsics.ext_fns
+        extrinsics.ext_fns[self.ext_fn_name] = self
 
 
 @dataclasses.dataclass
@@ -26,30 +70,33 @@ class Reader:
                 self.next_var += 1
                 self.vars[addr] = n
 
-            return ("Var", f"n{n}")
+            return VarTree(f"n{n}", None)
         elif isinstance(p, GlobalPort):
-            return ("Global", p.global_ref.name)
+            return GlobalTree(p.global_ref.name, None)
         elif isinstance(p, ErasePort):
-            return ("Erase",)
+            return Erase(None)
         elif isinstance(p, ExtValPort):
             if isinstance(p, PrimitiveExtValPort):
                 if isinstance(p.value, N32):
-                    return ("N32", p.value)
+                    return N32Tree(p.value, None)
                 elif isinstance(p.value, F32):
-                    return ("F32", p.value)
-            raise NotImplementedError("TODO")
+                    return F32Tree(p.value, None)
+            elif isinstance(p, CachedExtValPort):
+                return p.serialized
+            raise NotImplementedError(f"Unknown ExtValPort type {type(p)}")
         elif isinstance(p, ExtFnPort):
             p1, p2 = p.aux()
-            return ("ExtFn", p.label, self.read_wire(p1), self.read_wire(p2))
+            return ExtFnTree(p.label, self.read_wire(p1), self.read_wire(p2), None)
         elif isinstance(p, BranchPort):
             p1, p2 = p.aux()
-            p1 = self.ivm.follow(p1, destructive=False)
-            assert isinstance(p1, BranchPort)
-            p11, p12 = p1.aux()
-            return ("Branch", self.read_wire(p11), self.read_wire(p12), self.read_wire(p2))
+            bp = self.ivm.follow(WirePort(wire=p1), destructive=False)
+            assert isinstance(bp, BranchPort)
+            p11, p12 = bp.aux()
+            return BranchTree(
+                self.read_wire(p11), self.read_wire(p12), self.read_wire(p2), None
+            )
         else:
-            raise NotImplementedError("OK TODO")
+            raise NotImplementedError(f"Unknown ExtFnPort type {type(p)}")
 
     def read_wire(self, p: Wire) -> Tree:
         return self.read_port(WirePort(wire=p))
-

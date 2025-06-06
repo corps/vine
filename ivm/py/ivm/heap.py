@@ -44,6 +44,7 @@ TwoSidedWireReference = tuple[Wire, Wire]
 # ports.
 AuxPairWireReference = tuple[Wire, Wire]
 
+
 class Tag(enum.IntEnum):
     Wire = 1
     Global = 2
@@ -53,46 +54,51 @@ class Tag(enum.IntEnum):
     ExtFn = 6
     Branch = 7
 
-@dataclasses.dataclass
+
 class Port:
     tag: Tag
 
     ERASE: "ClassVar[NilaryNodePort]"
 
-@dataclasses.dataclass
-class NilaryNodePort(Port):
-    pass
 
+class NilaryNodePort(Port):
     def fork(self) -> "NilaryNodePort":
         return self
 
     def drop(self) -> None:
         return
 
+
 @dataclasses.dataclass
 class ErasePort(NilaryNodePort):
     tag: Tag = Tag.Erase
+
+
 Port.ERASE = ErasePort()
+
 
 @dataclasses.dataclass
 class WirePort(NilaryNodePort):
     wire: Wire
     tag: Tag = Tag.Wire
 
+
 @dataclasses.dataclass
 class BinaryNodePort(Port):
-    tag: Tag
     target: Wire
     label: str
+    tag: Tag
 
     def aux(self) -> AuxPairWireReference:
         return self.target, self.target.other_half
+
 
 @dataclasses.dataclass
 class CombPort(BinaryNodePort):
     label: str
     target: Wire
     tag: Tag = Tag.Comb
+
 
 @dataclasses.dataclass
 class BranchPort(BinaryNodePort):
@@ -139,6 +145,3 @@ class WireHeap:
     def new_wires(self) -> tuple[TwoSidedWireReference, TwoSidedWireReference]:
         wire = self.alloc_node()
         return (wire, wire), (wire.other_half, wire.other_half)
-
-
-

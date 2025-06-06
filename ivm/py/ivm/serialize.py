@@ -1,21 +1,37 @@
-from .ast import Nets, Net, Tree
+from .tree import (
+    Nets,
+    Net,
+    Tree,
+    VarTree,
+    Erase,
+    N32Tree,
+    F32Tree,
+    CombTree,
+    ExtFnTree,
+    GlobalTree,
+    BranchTree,
+    BlackBox,
+)
 from .extrinsics import PrimitiveExtValPort
 from .globals import Global, Nilary, Binary, GlobalPort, Inert
 from .heap import Port, Tag
 from .vm import IVM
 
+
 def insert_nets(ivm: IVM, nets: Nets) -> dict[str, Global]:
-    gs: dict[str, Global] = { name: Global(name) for name in nets.keys() }
+    gs: dict[str, Global] = {name: Global(name) for name in nets.keys()}
     for name, net in nets.items():
         serialize_net(ivm, net, name, gs)
 
-    for g in gs.items():
+    for g in gs.values():
         connect_comb_labels(g)
 
     return gs
 
+
 class UnknownGlobal(Exception):
     pass
+
 
 def connect_comb_labels(g: Global):
     q: list[Global] = [g]
@@ -27,13 +43,16 @@ def connect_comb_labels(g: Global):
         seen.add(next_g)
 
         for instruction in next_g.instructions:
-            if isinstance(instruction, Nilary) and isinstance(instruction.port, GlobalPort):
+            if isinstance(instruction, Nilary) and isinstance(
+                instruction.port, GlobalPort
+            ):
                 next_g.extend_labels(instruction.port.global_ref)
                 if instruction.port.global_ref not in seen:
                     q.append(instruction.port.global_ref)
             if isinstance(instruction, Binary):
                 if instruction.tag == Tag.Comb:
                     next_g.add_label(instruction.label)
+
 
 def serialize_net(ivm: IVM, net: Net, name: str, gs: dict[str, Global]):
     g = gs[name]
@@ -44,8 +63,9 @@ def serialize_net(ivm: IVM, net: Net, name: str, gs: dict[str, Global]):
     def serialize_pair(a: Tree, b: Tree):
         a = unbox(a)
         b = unbox(b)
-        if b[0] == "Var":
-            if a[0] == "Var":
+        if isinstance(b, VarTree):
+            if isinstance(a, VarTree):
+                # Already handled via equivalents
                 return
             a, b = b, a
 
@@ -54,57 +74,57 @@ def serialize_net(ivm: IVM, net: Net, name: str, gs: dict[str, Global]):
 
     def serialize_tree(a: Tree) -> int:
         tree = unbox(a)
-        if tree[0] == "Var":
-            if (register := registers.get(tree[1])) is None:
+        if isinstance(tree, VarTree):
+            if (register := registers.get(tree.name)) is None:
                 register = instructions.new_register()
-                registers[tree[1]] = register
+                registers[tree.name] = register
                 return register
             return register
         register = instructions.new_register()
         serialize_tree_to(tree, register)
         return register
 
-    def serialize_tree_to(b: Tree, to: int):
-        tree = unbox(b)
-        if tree[0] == "Erase":
+    def serialize_tree_to(fr: Tree, to: int):
+        tree = unbox(fr)
+        if isinstance(tree, Erase):
             instructions.append(Nilary(to, Port.ERASE))
-        elif tree[0] == "N32" or tree[0] == "F32":
-            instructions.append(Nilary(to, PrimitiveExtValPort(value=tree[1])))
-        elif tree[0] == "Comb":
-            a = serialize_tree(tree[2])
-            b = serialize_tree(tree[3])
-            instructions.append(Binary(Tag.Comb, tree[1], to, a, b))
-        elif tree[0] == "ExtFn":
-            a = serialize_tree(tree[2])
-            b = serialize_tree(tree[3])
-            instructions.append(Binary(Tag.ExtFn, tree[1], to, a, b))
-        elif tree[0] == "Global":
+        if isinstance(tree, (N32Tree, F32Tree)):
+            instructions.append(Nilary(to, PrimitiveExtValPort(value=tree.value)))
+        elif isinstance(tree, CombTree):
+            a = serialize_tree(tree.left)
+            b = serialize_tree(tree.right)
+            instructions.append(Binary(Tag.Comb, tree.label, to, a, b))
+        elif isinstance(tree, ExtFnTree):
+            a = serialize_tree(tree.left)
+            b = serialize_tree(tree.right)
+            instructions.append(Binary(Tag.ExtFn, tree.label, to, a, b))
+        elif isinstance(tree, GlobalTree):
             try:
-                port = GlobalPort(global_ref=gs[tree[1]])
+                port = GlobalPort(global_ref=gs[tree.name])
             except KeyError:
-                raise UnknownGlobal(f"unknown global {repr(tree[1])}")
+                raise UnknownGlobal(f"unknown global {repr(tree.name)}")
             instructions.append(Nilary(to, port))
-        elif tree[0] == "Branch":
+        elif isinstance(tree, BranchTree):
             r = instructions.new_register()
-            t1 = serialize_tree(tree[1])
-            t2 = serialize_tree(tree[2])
+            t1 = serialize_tree(tree.n0)
+            t2 = serialize_tree(tree.n1)
             instructions.append(Binary(Tag.Branch, "", r, t1, t2))
-            t3 = serialize_tree(tree[3])
+            t3 = serialize_tree(tree.n2)
             instructions.append(Binary(Tag.Branch, "", to, r, t3))
-        elif tree[0] == "Var":
-            assert tree[1] not in registers
-            registers[tree[1]] = to
-        elif tree[0] == "BlackBox":
-            from_ = serialize_tree(tree[1])
+        elif isinstance(tree, VarTree):
+            assert tree.name not in registers
+            registers[tree.name] = to
+        elif isinstance(tree, BlackBox):
+            from_ = serialize_tree(tree.inner)
             instructions.append(Inert(to, from_))
         else:
-            assert False, "unreachable"
+            raise NotImplementedError(f"unknown tree {repr(tree)}")
 
     for pa, pb in net.pairs:
         pa, pb = unbox(pa), unbox(pb)
-        if pa[0] == "Var" and pb[0] == "Var":
-            an = equivalents.pop(pa[1], pa[1])
-            bn = equivalents.pop(pb[1], pb[1])
+        if isinstance(pa, VarTree) and isinstance(pb, VarTree):
+            an = equivalents.pop(pa.name, pa.name)
+            bn = equivalents.pop(pb.name, pb.name)
             equivalents[an] = bn
             equivalents[bn] = an
 
@@ -113,20 +133,21 @@ def serialize_net(ivm: IVM, net: Net, name: str, gs: dict[str, Global]):
             registers[b] = registers[a] = instructions.new_register()
 
     root = unbox(net.root)
-    if root[0] == "Var":
-        registers[root[1]] = 0
-        if b := equivalents.get(root[1]):
-            registers[b] = 0
+    if isinstance(root, VarTree):
+        registers[root.name] = 0
+        if bb := equivalents.get(root.name):
+            registers[bb] = 0
 
     for pa, pb in reversed(net.pairs):
         serialize_pair(pa, pb)
 
-    if root[0] != "Var":
+    if isinstance(root, VarTree):
         serialize_tree_to(net.root, 0)
 
     connect_comb_labels(g)
 
+
 def unbox(a: Tree) -> Tree:
-    while a[0] == "Blackbox":
-        a = a[1]
+    while isinstance(a, BlackBox):
+        a = a.inner
     return a

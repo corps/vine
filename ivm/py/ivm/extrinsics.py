@@ -2,7 +2,7 @@ import dataclasses
 from dataclasses import field
 from typing import Any, Callable, Mapping
 
-from .ast import N32, F32
+from .tree import N32, F32
 from .heap import NilaryNodePort, Tag, BinaryNodePort, Wire
 
 
@@ -17,6 +17,7 @@ class ExtValPort(NilaryNodePort):
     def drop(self) -> None:
         raise NotImplementedError(f"Extrinsic values should subclass drop")
 
+
 @dataclasses.dataclass
 class PrimitiveExtValPort(ExtValPort):
     value: N32 | F32
@@ -28,6 +29,7 @@ class PrimitiveExtValPort(ExtValPort):
     def drop(self) -> None:
         return
 
+
 @dataclasses.dataclass
 class ExtFnPort(BinaryNodePort):
     label: str
@@ -36,7 +38,7 @@ class ExtFnPort(BinaryNodePort):
 
     @property
     def swapped(self) -> bool:
-        return self.label.startswith("@")
+        return self.label.endswith("$")
 
     def unwrap_label(self) -> str:
         if self.swapped:
@@ -44,13 +46,13 @@ class ExtFnPort(BinaryNodePort):
         else:
             return self.label
 
-
     def swap(self) -> "ExtFnPort":
         if self.swapped:
-            return dataclasses.replace(self, label=self.label[1:])
+            return dataclasses.replace(self, label=self.label[:-1])
         else:
-            return dataclasses.replace(self, label="@" + self.label)
+            return dataclasses.replace(self, label=self.label + "$")
+
 
 @dataclasses.dataclass
 class Extrinsics:
-    ext_fns: dict[str, Callable[[Any, Any], ExtFnPort]] = field(default_factory=dict)
+    ext_fns: dict[str, Callable[[Any, Any], ExtValPort]] = field(default_factory=dict)
