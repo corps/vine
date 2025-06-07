@@ -35,19 +35,19 @@ class UnknownGlobal(Exception):
 
 def connect_comb_labels(g: Global):
     q: list[Global] = [g]
-    seen: set[Global] = set()
+    seen: set[str] = set()
     while q:
         next_g = q.pop(0)
-        if next_g in seen:
+        if next_g.name in seen:
             continue
-        seen.add(next_g)
+        seen.add(next_g.name)
 
         for instruction in next_g.instructions:
             if isinstance(instruction, Nilary) and isinstance(
                 instruction.port, GlobalPort
             ):
                 next_g.extend_labels(instruction.port.global_ref)
-                if instruction.port.global_ref not in seen:
+                if instruction.port.global_ref.name not in seen:
                     q.append(instruction.port.global_ref)
             if isinstance(instruction, Binary):
                 if instruction.tag == Tag.Comb:
@@ -88,19 +88,19 @@ def serialize_net(ivm: IVM, net: Net, name: str, gs: dict[str, Global]):
         tree = unbox(fr)
         if isinstance(tree, Erase):
             instructions.append(Nilary(to, Port.ERASE))
-        if isinstance(tree, (N32Tree, F32Tree)):
-            instructions.append(Nilary(to, PrimitiveExtValPort(value=tree.value)))
+        elif isinstance(tree, (N32Tree, F32Tree)):
+            instructions.append(Nilary(to, PrimitiveExtValPort(value=tree.value, trace=tree.trace)))
         elif isinstance(tree, CombTree):
             a = serialize_tree(tree.left)
             b = serialize_tree(tree.right)
-            instructions.append(Binary(Tag.Comb, tree.label, to, a, b))
+            instructions.append(Binary(Tag.Comb, tree.label, to, a, b, tree.trace))
         elif isinstance(tree, ExtFnTree):
             a = serialize_tree(tree.left)
             b = serialize_tree(tree.right)
-            instructions.append(Binary(Tag.ExtFn, tree.label, to, a, b))
+            instructions.append(Binary(Tag.ExtFn, tree.label, to, a, b, tree.trace))
         elif isinstance(tree, GlobalTree):
             try:
-                port = GlobalPort(global_ref=gs[tree.name])
+                port = GlobalPort(global_ref=gs[tree.name], trace=tree.trace)
             except KeyError:
                 raise UnknownGlobal(f"unknown global {repr(tree.name)}")
             instructions.append(Nilary(to, port))
@@ -108,9 +108,9 @@ def serialize_net(ivm: IVM, net: Net, name: str, gs: dict[str, Global]):
             r = instructions.new_register()
             t1 = serialize_tree(tree.n0)
             t2 = serialize_tree(tree.n1)
-            instructions.append(Binary(Tag.Branch, "", r, t1, t2))
+            instructions.append(Binary(Tag.Branch, "", r, t1, t2, tree.trace))
             t3 = serialize_tree(tree.n2)
-            instructions.append(Binary(Tag.Branch, "", to, r, t3))
+            instructions.append(Binary(Tag.Branch, "", to, r, t3, tree.trace))
         elif isinstance(tree, VarTree):
             assert tree.name not in registers
             registers[tree.name] = to
@@ -141,7 +141,7 @@ def serialize_net(ivm: IVM, net: Net, name: str, gs: dict[str, Global]):
     for pa, pb in reversed(net.pairs):
         serialize_pair(pa, pb)
 
-    if isinstance(root, VarTree):
+    if not isinstance(root, VarTree):
         serialize_tree_to(net.root, 0)
 
     connect_comb_labels(g)

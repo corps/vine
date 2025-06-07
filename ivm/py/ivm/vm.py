@@ -77,6 +77,8 @@ class IVM(ExecutionContext):
                 if destructive:
                     self.heap.free_wire(wire)
                 a = b
+            else:
+                break
         return a
 
     def link_wire(self, a: Wire, b: Port):
@@ -224,7 +226,7 @@ class IVM(ExecutionContext):
         self.link_register(0, port)
 
         for instruction in instructions:
-            new_inert = instruction.execute(self, port)
+            new_inert = instruction.execute(self)
             if new_inert:
                 self.inert.append(new_inert)
 

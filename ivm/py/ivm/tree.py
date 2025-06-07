@@ -4,15 +4,12 @@ import dataclasses
 from dataclasses import dataclass
 from math import isnan
 from typing import (
-    Union,
-    Literal,
-    Sequence,
-    Iterator,
     OrderedDict,
     Any,
-    Generator,
-    Callable,
+    Iterator,
 )
+
+from ivm.heap import Trace
 
 
 class N32(ctypes.c_uint32):
@@ -24,6 +21,11 @@ class N32(ctypes.c_uint32):
     def __hash__(self) -> int:
         return self.value
 
+    def __repr__(self) -> str:
+        return str(self.value)
+
+    __str__ = __repr__
+
 
 class F32(ctypes.c_float):
     def __eq__(self, other: Any):
@@ -31,19 +33,29 @@ class F32(ctypes.c_float):
             return self.value == other.value
         return False
 
+    def __repr__(self) -> str:
+        return str(self.value)
+
+    __str__ = __repr__
+
 
 class Tree(abc.ABC):
-    trace: Callable[[], None] | None
+    trace: Trace | None
+
+    @abc.abstractmethod
+    def __iter__(self) -> "Iterator[Tree]": ...
 
 
 @dataclasses.dataclass
 class Erase(Tree):
-    trace: Callable[[], None] | None
+    trace: Trace | None
 
     def __str__(self):
         return "_"
 
     __repr__ = __str__
+
+    def __iter__(self) -> Iterator[Tree]: return iter(())
 
 
 @dataclasses.dataclass
@@ -51,12 +63,16 @@ class CombTree(Tree):
     label: str
     left: "Tree"
     right: "Tree"
-    trace: Callable[[], None] | None
+    trace: Trace | None
 
     def __str__(self):
         return f"{self.label}({self.left}, {self.right})"
 
     __repr__ = __str__
+
+    def __iter__(self) -> Iterator[Tree]:
+        yield self.left
+        yield self.right
 
 
 @dataclasses.dataclass
@@ -64,12 +80,16 @@ class ExtFnTree(Tree):
     label: str
     left: "Tree"
     right: "Tree"
-    trace: Callable[[], None] | None
+    trace: Trace | None
 
     def __str__(self):
         return f"@{self.label}({self.left}, {self.right})"
 
     __repr__ = __str__
+
+    def __iter__(self) -> Iterator[Tree]:
+        yield self.left
+        yield self.right
 
 
 @dataclasses.dataclass
@@ -77,29 +97,38 @@ class BranchTree(Tree):
     n0: "Tree"
     n1: "Tree"
     n2: "Tree"
-    trace: Callable[[], None] | None
+    trace: Trace | None
 
     def __str__(self):
         return f"?({self.n0} {self.n1} {self.n2})"
 
     __repr__ = __str__
 
+    def __iter__(self) -> Iterator[Tree]:
+        yield self.n0
+        yield self.n1
+        yield self.n2
+
+
 
 @dataclasses.dataclass
 class N32Tree(Tree):
     value: N32
-    trace: Callable[[], None] | None
+    trace: Trace | None
 
     def __str__(self):
         return f"{self.value.value}"
 
     __repr__ = __str__
 
+    def __iter__(self) -> Iterator[Tree]:
+        return iter(())
+
 
 @dataclasses.dataclass
 class F32Tree(Tree):
     value: F32
-    trace: Callable[[], None] | None
+    trace: Trace | None
 
     def __str__(self):
         if isnan(self.value.value):
@@ -108,38 +137,50 @@ class F32Tree(Tree):
 
     __repr__ = __str__
 
+    def __iter__(self) -> Iterator[Tree]:
+        return iter(())
+
 
 @dataclasses.dataclass
 class VarTree(Tree):
     name: str
-    trace: Callable[[], None] | None
+    trace: Trace | None
 
     def __str__(self):
         return self.name
 
     __repr__ = __str__
+
+    def __iter__(self) -> Iterator[Tree]:
+        return iter(())
 
 
 @dataclasses.dataclass
 class GlobalTree(Tree):
     name: str
-    trace: Callable[[], None] | None
+    trace: Trace | None
 
     def __str__(self):
         return self.name
 
     __repr__ = __str__
 
+    def __iter__(self) -> Iterator[Tree]:
+        return iter(())
+
 
 @dataclasses.dataclass
 class BlackBox(Tree):
     inner: "Tree"
-    trace: Callable[[], None] | None
+    trace: Trace | None
 
     def __str__(self):
         return f"{self.inner}"
 
     __repr__ = __str__
+
+    def __iter__(self) -> Iterator[Tree]:
+        return iter(self.inner)
 
 
 @dataclass(frozen=True)

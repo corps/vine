@@ -1,7 +1,10 @@
 import dataclasses
 import enum
 import sys
-from typing import Any, ClassVar, Literal, reveal_type, Optional
+from typing import Any, ClassVar, Optional, Callable
+
+SourceInfo = tuple[str, tuple[int, int], tuple[int, int]]
+Trace = SourceInfo | Callable[[], None]
 
 
 class Wire:
@@ -57,10 +60,12 @@ class Tag(enum.IntEnum):
 
 class Port:
     tag: Tag
+    trace: Trace | None = None
 
     ERASE: "ClassVar[NilaryNodePort]"
 
 
+@dataclasses.dataclass
 class NilaryNodePort(Port):
     def fork(self) -> "NilaryNodePort":
         return self
@@ -81,6 +86,7 @@ Port.ERASE = ErasePort()
 class WirePort(NilaryNodePort):
     wire: Wire
     tag: Tag = Tag.Wire
+    trace: Trace | None = None
 
 
 @dataclasses.dataclass
@@ -88,6 +94,7 @@ class BinaryNodePort(Port):
     target: Wire
     label: str
     tag: Tag
+    trace: Trace | None = None
 
     def aux(self) -> AuxPairWireReference:
         return self.target, self.target.other_half
@@ -98,12 +105,14 @@ class CombPort(BinaryNodePort):
     label: str
     target: Wire
     tag: Tag = Tag.Comb
+    trace: Trace | None = None
 
 
 @dataclasses.dataclass
 class BranchPort(BinaryNodePort):
     target: Wire
     tag: Tag = Tag.Branch
+    trace: Trace | None = None
 
 
 @dataclasses.dataclass

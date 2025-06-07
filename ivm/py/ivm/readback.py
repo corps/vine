@@ -4,7 +4,7 @@ from typing import Any
 
 from .extrinsics import ExtValPort, PrimitiveExtValPort, ExtFnPort, Extrinsics
 from .globals import GlobalPort
-from .heap import Port, WirePort, ErasePort, BranchPort, Wire
+from .heap import Port, WirePort, ErasePort, BranchPort, Wire, CombPort
 from .tree import (
     Tree,
     N32,
@@ -15,7 +15,7 @@ from .tree import (
     N32Tree,
     F32Tree,
     ExtFnTree,
-    BranchTree,
+    BranchTree, CombTree,
 )
 from .vm import IVM
 
@@ -64,39 +64,41 @@ class Reader:
             addr = id(p.wire)
             if addr in self.vars:
                 n = self.vars.pop(addr)
-                del self.vars[addr]
             else:
                 n = self.next_var
                 self.next_var += 1
                 self.vars[addr] = n
 
-            return VarTree(f"n{n}", None)
+            return VarTree(f"n{n}", p.trace)
         elif isinstance(p, GlobalPort):
-            return GlobalTree(p.global_ref.name, None)
+            return GlobalTree(p.global_ref.name, p.trace)
         elif isinstance(p, ErasePort):
-            return Erase(None)
+            return Erase(p.trace)
         elif isinstance(p, ExtValPort):
             if isinstance(p, PrimitiveExtValPort):
                 if isinstance(p.value, N32):
-                    return N32Tree(p.value, None)
+                    return N32Tree(p.value, p.trace)
                 elif isinstance(p.value, F32):
-                    return F32Tree(p.value, None)
+                    return F32Tree(p.value, p.trace)
             elif isinstance(p, CachedExtValPort):
                 return p.serialized
             raise NotImplementedError(f"Unknown ExtValPort type {type(p)}")
+        elif isinstance(p, CombPort):
+            p1, p2 = p.aux()
+            return CombTree(p.label, self.read_wire(p1), self.read_wire(p2), p.trace)
         elif isinstance(p, ExtFnPort):
             p1, p2 = p.aux()
-            return ExtFnTree(p.label, self.read_wire(p1), self.read_wire(p2), None)
+            return ExtFnTree(p.label, self.read_wire(p1), self.read_wire(p2), p.trace)
         elif isinstance(p, BranchPort):
             p1, p2 = p.aux()
             bp = self.ivm.follow(WirePort(wire=p1), destructive=False)
             assert isinstance(bp, BranchPort)
             p11, p12 = bp.aux()
             return BranchTree(
-                self.read_wire(p11), self.read_wire(p12), self.read_wire(p2), None
+                self.read_wire(p11), self.read_wire(p12), self.read_wire(p2), p.trace
             )
         else:
-            raise NotImplementedError(f"Unknown ExtFnPort type {type(p)}")
+            raise NotImplementedError(f"Unknown type {type(p)}")
 
     def read_wire(self, p: Wire) -> Tree:
         return self.read_port(WirePort(wire=p))

@@ -1,8 +1,8 @@
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import overload, Literal, Callable
-import ast
+from typing import overload, Literal
 
+from .heap import Trace
 from .tree import (
     Net,
     Tree,
@@ -45,7 +45,7 @@ class SyntaxError(Exception):
 
     def __init__(self, message: str, position: tuple[int, tuple[int, int]]) -> None:
         self.position = position
-        super().__init__(message)
+        super().__init__(f"{message} on line {position[0]}:{position[1][0]}")
 
 
 @dataclass
@@ -114,28 +114,8 @@ class IvyParser:
 
     def tracer(
         self, name: str, line_extent: tuple[int, int], col_extent: tuple[int, int]
-    ) -> Callable[[], None]:
-        return eval(
-            compile(
-                ast.Interactive(
-                    [
-                        ast.FunctionDef(
-                            name,
-                            ast.arguments([], [], None, [], [], None, []),
-                            [],
-                            [],
-                            lineno=line_extent[0],
-                            col_offset=col_extent[0],
-                            end_lineno=line_extent[1],
-                            end_col_offset=col_extent[1],
-                        ),
-                    ]
-                ),
-                filename=self.state.source_file,
-                mode="single",
-                flags=0,
-            )
-        )
+    ) -> Trace:
+        return self.state.source_file, line_extent, col_extent
 
     def parse_u32_like(self, token: str) -> N32:
         if token.startswith("0b"):
@@ -264,7 +244,7 @@ class IvyParser:
             self.state.eat(close_paren, require=True)
             end_pos = self.state.lexer.position
             return ExtFnTree(
-                ident + "$" if swapped else "",
+                ident + ("$" if swapped else ""),
                 a,
                 b,
                 self.tracer(

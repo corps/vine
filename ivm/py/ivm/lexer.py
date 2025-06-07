@@ -63,10 +63,9 @@ class Lexer:
     position: tuple[int, tuple[int, int]] = (0, (0, 0))
 
     def tokenize(self) -> Iterator[tuple[int, str]]:
-        line_iter = zip(
-            range(self.position[0], len(self.lines)), self.lines[self.position[0] :]
-        )
-        for ln, line in line_iter:
+        ln = self.position[0]
+        while ln < len(self.lines):
+            line = self.lines[ln]
             i = p.finditer(line, pos=self.position[1][1])
             while True:
                 for match in i:
@@ -112,6 +111,8 @@ class Lexer:
                         yield group_match, token
                 else:
                     break
+
+            self.position = ((ln := ln + 1), (0, 0))
 
 
 def test_tokenize():

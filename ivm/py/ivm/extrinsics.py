@@ -3,13 +3,14 @@ from dataclasses import field
 from typing import Any, Callable, Mapping
 
 from .tree import N32, F32
-from .heap import NilaryNodePort, Tag, BinaryNodePort, Wire
+from .heap import NilaryNodePort, Tag, BinaryNodePort, Wire, Trace
 
 
 @dataclasses.dataclass
 class ExtValPort(NilaryNodePort):
     value: Any
     tag: Tag = Tag.ExtVal
+    trace: Trace | None = None
 
     def fork(self) -> "NilaryNodePort":
         raise NotImplementedError(f"Extrinsic values should subclass fork")
@@ -22,6 +23,7 @@ class ExtValPort(NilaryNodePort):
 class PrimitiveExtValPort(ExtValPort):
     value: N32 | F32
     tag: Tag = Tag.ExtVal
+    trace: Trace | None = None
 
     def fork(self) -> "NilaryNodePort":
         return self
@@ -35,6 +37,7 @@ class ExtFnPort(BinaryNodePort):
     label: str
     target: Wire
     tag: Tag = Tag.ExtFn
+    trace: Trace | None = None
 
     @property
     def swapped(self) -> bool:

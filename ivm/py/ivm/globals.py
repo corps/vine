@@ -1,8 +1,8 @@
 import dataclasses
-from typing import Protocol, Iterator
+from typing import Protocol, Iterator, Callable
 
 from .extrinsics import ExtFnPort
-from .heap import Port, NilaryNodePort, Tag, WireHeap, CombPort, BranchPort, WirePort
+from .heap import Port, NilaryNodePort, Tag, WireHeap, CombPort, BranchPort, WirePort, Trace
 
 
 class ExecutionContext(Protocol):
@@ -13,20 +13,19 @@ class ExecutionContext(Protocol):
 
 class Instruction(Protocol):
     def execute(
-        self, context: "ExecutionContext", port: Port
+        self, context: "ExecutionContext"
     ) -> tuple[Port, Port] | None: ...
 
 
 @dataclasses.dataclass
 class Nilary(Instruction):
-    register: int
+    register0: int
     port: NilaryNodePort
 
     def execute(
-        self, context: ExecutionContext, port: Port
+        self, context: ExecutionContext
     ) -> tuple[Port, Port] | None:
-        assert isinstance(port, NilaryNodePort)
-        context.link_register(self.register, port.fork())
+        context.link_register(self.register0, self.port.fork())
         return None
 
 
@@ -37,17 +36,18 @@ class Binary(Instruction):
     register0: int
     register1: int
     register2: int
+    trace: Trace | None
 
     def execute(
-        self, context: ExecutionContext, port: Port
+        self, context: ExecutionContext
     ) -> tuple[Port, Port] | None:
         wire = context.heap.alloc_node()
         if self.tag == Tag.Comb:
-            port = CombPort(target=wire, label=self.label)
+            port = CombPort(target=wire, label=self.label, trace=self.trace)
         elif self.tag == Tag.Branch:
-            port = BranchPort(target=wire, label=self.label)
+            port = BranchPort(target=wire, label=self.label, trace=self.trace)
         else:
-            port = ExtFnPort(target=wire, label=self.label)
+            port = ExtFnPort(target=wire, label=self.label, trace=self.trace)
         context.link_register(self.register0, port)
         context.link_register(self.register1, WirePort(wire=wire))
         context.link_register(self.register2, WirePort(wire=wire.other_half))
@@ -60,7 +60,7 @@ class Inert(Instruction):
     register1: int
 
     def execute(
-        self, context: ExecutionContext, port: Port
+        self, context: ExecutionContext
     ) -> tuple[Port, Port] | None:
         wires = context.heap.new_wires()
         context.link_register(self.register0, WirePort(wire=wires[0][0]))
@@ -111,3 +111,4 @@ class Global:
 class GlobalPort(NilaryNodePort):
     global_ref: Global
     tag: Tag = Tag.Global
+    trace: Trace | None = None

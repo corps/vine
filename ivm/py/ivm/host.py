@@ -3,7 +3,9 @@ from typing import Any, Callable
 
 from ivm.extrinsics import ExtValPort, ExtFnPort
 from ivm.globals import Global
+from ivm.parser import IvyParser
 from ivm.readback import ExtrinsicsCache
+from ivm.serialize import insert_nets
 from ivm.vm import IVM
 
 
@@ -25,4 +27,8 @@ class Host:
         self.ivm.extrinsics.ext_fns[c.__name__] = c
 
     def parse_file(self, filename: str):
-        pass
+        self.gs = insert_nets(self.ivm, IvyParser.from_file(filename).parse_nets())
+
+    def execute(self, global_name: str, value: ExtValPort) -> None:
+        self.ivm.boot(self.gs[global_name], value)
+        self.ivm.normalize()
