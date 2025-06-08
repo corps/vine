@@ -1,23 +1,23 @@
+from io import TextIOWrapper
 from typing import Any, Callable
 
 from ivm.extrinsics import ExtValPort, PrimitiveExtValPort
 from ivm.host import Host
 from ivm.tree import N32
-import sys
 
 
-def add_std_compat(host: Host):
+def add_std_compat(host: Host) -> None:
     def default_ext_fn(c: Callable[[Any, Any], ExtValPort]):
         host.add_ext_fun(c)
 
     @default_ext_fn
     def io_print_byte(io: Any, byte: N32) -> ExtValPort:
-        sys.stdout.write(chr(byte.value))
+        host.stdout.write(chr(byte.value))
         return PrimitiveExtValPort(N32(0))
 
     @default_ext_fn
     def io_flush(io: Any, _: Any) -> ExtValPort:
-        sys.stdout.flush()
+        host.stdout.flush()
         return PrimitiveExtValPort(N32(0))
 
     @default_ext_fn
@@ -46,7 +46,7 @@ def add_std_compat(host: Host):
 
     @default_ext_fn
     def io_read_byte(io: Any, default: N32) -> ExtValPort:
-        result = sys.stdin.read(1)
+        result = host.stdin.read(1)[:1]
         if not result:
             return PrimitiveExtValPort(default)
         return PrimitiveExtValPort(N32(ord(result)))

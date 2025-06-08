@@ -1,7 +1,6 @@
 import dataclasses
-import sys
 from dataclasses import field
-from typing import TypeVar, Iterable
+from typing import TypeVar, Iterable, Callable
 
 from .heap import (
     Port,
@@ -9,7 +8,6 @@ from .heap import (
     WireHeap,
     Tag,
     WirePort,
-    BinaryNodePort,
     CombPort,
     ErasePort,
     BranchPort,
@@ -23,7 +21,6 @@ _P = TypeVar("_P", bound=Port)
 _Q = TypeVar("_Q", bound=Port)
 _BP = TypeVar("_BP", bound=BinaryNodePort)
 
-
 @dataclasses.dataclass
 class IVM(ExecutionContext):
     heap: WireHeap = field(default_factory=WireHeap)
@@ -32,6 +29,13 @@ class IVM(ExecutionContext):
     inert: list[tuple[Port, Port]] = field(default_factory=list)
     registers: list[Port | None] = field(default_factory=list)
     extrinsics: Extrinsics = field(default_factory=lambda: Extrinsics())
+
+    on_interaction: Callable[[Port, Port, str], None] | None = None
+    on_link: Callable[[Port, Port], None] | None = None
+    on_link_wire: Callable[[Wire, Port], None] | None = None
+    on_iteration: Callable[[], None] | None = None
+    on_begin: Callable[[], None] | None = None
+    on_end: Callable[[], None] | None = None
 
     def boot(self, g: Global, ext_val: ExtValPort):
         """
@@ -52,19 +56,31 @@ class IVM(ExecutionContext):
         else:
             self.registers[register] = port
 
-    def do_fast(self):
-        while self.active_fast:
+    def do_fast(self, max_loops: int = -1) -> int:
+        while self.active_fast and max_loops != 0:
+            if max_loops > 0:
+                max_loops -= 1
             a, b = self.active_fast.pop()
             self.interact(a, b)
+        return max_loops
 
-    def normalize(self):
-        while True:
-            self.do_fast()
-            if self.active_slow:
-                a, b = self.active_slow.pop()
-                self.interact(a, b)
-            else:
-                break
+    def normalize(self, max_loops: int = -1):
+        if self.on_begin:
+            self.on_begin()
+
+        try:
+            while max_loops != 0:
+                max_loops = self.do_fast()
+                if self.active_slow and max_loops != 0:
+                    if max_loops > 0:
+                        max_loops -= 1
+                    a, b = self.active_slow.pop()
+                    self.interact(a, b)
+                else:
+                    break
+        finally:
+            if self.on_end:
+                self.on_end()
 
     def link_wire_wire(self, a: Wire, b: Wire):
         return self.link_wire(a, WirePort(wire=b))
@@ -82,6 +98,8 @@ class IVM(ExecutionContext):
         return a
 
     def link_wire(self, a: Wire, b: Port):
+        if self.on_link_wire:
+            self.on_link_wire(a, b)
         b = self.follow(b, True)
         c = a.swap_target(b)
         if c:
@@ -89,6 +107,9 @@ class IVM(ExecutionContext):
             self.link(c, b)
 
     def link(self, a: Port, b: Port) -> None:
+        if self.on_link:
+            self.on_link(a, b)
+
         if ports := _find_either_is(a, b, WirePort):
             a, b = ports
             self.link_wire(a.wire, b)
@@ -96,7 +117,8 @@ class IVM(ExecutionContext):
         if _find_both_one_of(a, b, (GlobalPort, ErasePort)) or _find_both_one_of(
             a, b, (ExtValPort, ErasePort)
         ):
-            sys.audit("ivm.erase", self)
+            if self.on_interaction:
+                self.on_interaction(a, b, "erase")
             return
         if (comb_ports := _find_both_are(a, b, BinaryNodePort)) and (
             a.tag == b.tag == Tag.Comb or a.tag == b.tag == Tag.ExtFn
@@ -118,47 +140,59 @@ class IVM(ExecutionContext):
         assert False, "unreachable"
 
     def interact(self, a: Port, b: Port) -> None:
-        if _find_either_is(a, b, WirePort) or _find_both_one_of(
-            a, b, (ErasePort, ExtValPort)
-        ):
+        had_error = False
+        try:
+            if _find_either_is(a, b, WirePort) or _find_both_one_of(
+                a, b, (ErasePort, ExtValPort)
+            ):
+                assert False, "unreachable"
+            if ports1 := _find_and_orient_both(a, b, GlobalPort, CombPort):
+                if not ports1[0].global_ref.contains_label(ports1[1].label):
+                    self.copy(ports1[0], ports1[1])
+                    return
+            if ports2 := _find_either_is(a, b, GlobalPort):
+                self.expand(ports2[0], ports2[1])
+                return
+            if ports3 := _find_both_are(a, b, BinaryNodePort):
+                if ports3[0].label == ports3[1].label:
+                    self.annihilate(ports3[0], ports3[1])
+                    return
+                self.commute(ports3[0], ports3[1])
+                return
+            if ports4 := _find_and_orient_both(a, b, BranchPort, ExtValPort):
+                self.branch(ports4[0], ports4[1])
+                return
+            if ports5 := _find_and_orient_both(a, b, ExtFnPort, ExtValPort):
+                self.call(ports5[0], ports5[1])
+                return
+            if ports6 := _find_and_orient_both(a, b, NilaryNodePort, BinaryNodePort):
+                self.copy(ports6[0], ports6[1])
+                return
             assert False, "unreachable"
-        if ports1 := _find_and_orient_both(a, b, GlobalPort, CombPort):
-            if not ports1[0].global_ref.contains_label(ports1[1].label):
-                self.copy(ports1[0], ports1[1])
-                return
-        if ports2 := _find_either_is(a, b, GlobalPort):
-            self.expand(ports2[0], ports2[1])
-            return
-        if ports3 := _find_both_are(a, b, BinaryNodePort):
-            if ports3[0].label == ports3[1].label:
-                self.annihilate(ports3[0], ports3[1])
-                return
-            self.commute(ports3[0], ports3[1])
-            return
-        if ports4 := _find_and_orient_both(a, b, BranchPort, ExtValPort):
-            self.branch(ports4[0], ports4[1])
-            return
-        if ports5 := _find_and_orient_both(a, b, ExtFnPort, ExtValPort):
-            self.call(ports5[0], ports5[1])
-            return
-        if ports6 := _find_and_orient_both(a, b, NilaryNodePort, BinaryNodePort):
-            self.copy(ports6[0], ports6[1])
-            return
-        assert False, "unreachable"
+        except Exception as e:
+            had_error = True
+            raise e
+        finally:
+            if not had_error and self.on_iteration:
+                self.on_iteration()
+
 
     def expand(self, a: GlobalPort, b: Port):
-        sys.audit("ivm.expand", self)
+        if self.on_interaction:
+            self.on_interaction(a, b, "expand")
         self.execute(a.global_ref.instructions, b)
 
     def annihilate(self, a: BinaryNodePort, b: BinaryNodePort):
-        sys.audit("ivm.annihilate", self)
+        if self.on_interaction:
+            self.on_interaction(a, b, "annihilate")
         a1, a2 = a.aux()
         b1, b2 = b.aux()
         self.link_wire_wire(a1, b1)
         self.link_wire_wire(a2, b2)
 
     def copy(self, a: NilaryNodePort, b: BinaryNodePort):
-        sys.audit("ivm.copy", self)
+        if self.on_interaction:
+            self.on_interaction(a, b, "copy")
         x, y = b.aux()
         self.link_wire(x, a.fork())
         self.link_wire(y, a)
@@ -169,7 +203,8 @@ class IVM(ExecutionContext):
         return updated, wire, wire.other_half
 
     def commute(self, a: BinaryNodePort, b: BinaryNodePort):
-        sys.audit("ivm.commute", self)
+        if self.on_interaction:
+            self.on_interaction(a, b, "commute")
         a1 = self._commute_copy(a)
         a2 = self._commute_copy(a)
         b1 = self._commute_copy(b)
@@ -189,11 +224,12 @@ class IVM(ExecutionContext):
         self.link_wire(Wire(b_2), a2[0])
 
     def call(self, a: ExtFnPort, b: ExtValPort):
+        if self.on_interaction:
+            self.on_interaction(a, b, "call")
         rhs, out = a.aux()
         rhs_port = rhs.load_target()
         if rhs_port:
             if isinstance(rhs_port, ExtValPort):
-                sys.audit("ivm.call", self)
                 self.heap.free_wire(rhs)
                 result = self.extrinsics.ext_fns[a.unwrap_label()](
                     b.value, rhs_port.value
@@ -207,7 +243,8 @@ class IVM(ExecutionContext):
         self.link_wire_wire(new_fn[2], out)
 
     def branch(self, a: BranchPort, b: ExtValPort):
-        sys.audit("ivm.branch", self)
+        if self.on_interaction:
+            self.on_interaction(a, b, "branch")
         b1, b2 = a.aux()
         branch, z, p = self._commute_copy(a)
         self.link_wire(b1, branch)

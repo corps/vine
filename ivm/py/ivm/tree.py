@@ -59,7 +59,7 @@ class Erase(Tree):
 
 
 @dataclasses.dataclass
-class CombTree(Tree):
+class CombNode(Tree):
     label: str
     left: "Tree"
     right: "Tree"
@@ -76,7 +76,7 @@ class CombTree(Tree):
 
 
 @dataclasses.dataclass
-class ExtFnTree(Tree):
+class ExtFnNode(Tree):
     label: str
     left: "Tree"
     right: "Tree"
@@ -93,7 +93,7 @@ class ExtFnTree(Tree):
 
 
 @dataclasses.dataclass
-class BranchTree(Tree):
+class BranchNode(Tree):
     n0: "Tree"
     n1: "Tree"
     n2: "Tree"
@@ -112,7 +112,7 @@ class BranchTree(Tree):
 
 
 @dataclasses.dataclass
-class N32Tree(Tree):
+class N32Node(Tree):
     value: N32
     trace: Trace | None
 
@@ -126,7 +126,7 @@ class N32Tree(Tree):
 
 
 @dataclasses.dataclass
-class F32Tree(Tree):
+class F32Node(Tree):
     value: F32
     trace: Trace | None
 
@@ -142,7 +142,7 @@ class F32Tree(Tree):
 
 
 @dataclasses.dataclass
-class VarTree(Tree):
+class VarNode(Tree):
     name: str
     trace: Trace | None
 
@@ -156,7 +156,7 @@ class VarTree(Tree):
 
 
 @dataclasses.dataclass
-class GlobalTree(Tree):
+class GlobalNode(Tree):
     name: str
     trace: Trace | None
 

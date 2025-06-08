@@ -11,13 +11,13 @@ from .tree import (
     F32,
     BlackBox,
     Erase,
-    BranchTree,
-    ExtFnTree,
-    VarTree,
-    CombTree,
-    GlobalTree,
-    F32Tree,
-    N32Tree,
+    BranchNode,
+    ExtFnNode,
+    VarNode,
+    CombNode,
+    GlobalNode,
+    F32Node,
+    N32Node,
 )
 from .lexer import (
     Lexer,
@@ -115,7 +115,7 @@ class IvyParser:
     def tracer(
         self, name: str, line_extent: tuple[int, int], col_extent: tuple[int, int]
     ) -> Trace:
-        return self.state.source_file, line_extent, col_extent
+        return self.state.source_file, name, line_extent, col_extent
 
     def parse_u32_like(self, token: str) -> N32:
         if token.startswith("0b"):
@@ -181,7 +181,7 @@ class IvyParser:
     def parse_tree(self) -> Tree:
         start_pos = self.state.lexer.position
         if self.state.check(n32):
-            return N32Tree(
+            return N32Node(
                 self.parse_u32_like(self.state.eat(n32, require=True)),
                 self.tracer(
                     "n32",
@@ -190,7 +190,7 @@ class IvyParser:
                 ),
             )
         elif self.state.check(f32):
-            return F32Tree(
+            return F32Node(
                 self.parse_f32_like(self.state.eat(f32, require=True)),
                 self.tracer(
                     "f32",
@@ -200,7 +200,7 @@ class IvyParser:
             )
         elif self.state.check(global_):
             global_name = self.state.eat(global_, require=True)
-            return GlobalTree(
+            return GlobalNode(
                 global_name,
                 self.tracer(
                     global_name,
@@ -215,7 +215,7 @@ class IvyParser:
                 b = self.parse_tree()
                 self.state.eat(close_paren, require=True)
                 end_pos = self.state.lexer.position
-                return CombTree(
+                return CombNode(
                     ident,
                     a,
                     b,
@@ -226,7 +226,7 @@ class IvyParser:
                     ),
                 )
             else:
-                return VarTree(
+                return VarNode(
                     ident,
                     self.tracer(
                         ident,
@@ -243,7 +243,7 @@ class IvyParser:
             b = self.parse_tree()
             self.state.eat(close_paren, require=True)
             end_pos = self.state.lexer.position
-            return ExtFnTree(
+            return ExtFnNode(
                 ident + ("$" if swapped else ""),
                 a,
                 b,
@@ -261,7 +261,7 @@ class IvyParser:
             c = self.parse_tree()
             self.state.eat(close_paren, require=True)
             end_pos = self.state.lexer.position
-            return BranchTree(
+            return BranchNode(
                 a,
                 b,
                 c,

@@ -1,16 +1,15 @@
 import dataclasses
 import enum
-import sys
 from typing import Any, ClassVar, Optional, Callable
 
-SourceInfo = tuple[str, tuple[int, int], tuple[int, int]]
+SourceInfo = tuple[str, str, tuple[int, int], tuple[int, int]]
 Trace = SourceInfo | Callable[[], None]
 
 
 class Wire:
     other_half: "Wire"
     left_half: "Wire"
-    target: Any = None
+    target: "Wire | Port | None" = None
 
     def __new__(cls, *args: Any, **kwds: Any) -> "Wire":
         left = object.__new__(cls)
@@ -24,10 +23,10 @@ class Wire:
 
     def load_target(self) -> Optional["Port"]:
         port = self.target
-        if port is None:
+        if port is None or isinstance(port, Wire):
             return None
 
-        assert isinstance(port, Port)
+        assert isinstance(port, Port), port
         return port
 
     def swap_target(self, port: "Port") -> Optional["Port"]:
@@ -36,15 +35,7 @@ class Wire:
         return old
 
 
-# Notably, the two references --are the same wire--, but are returned
-# as two possible routes to the underlying wire (two sides of the same underlying
-# port pointer).  This works because in practice if both sides of a wire
-# are "occupied" principally, there is an interaction which can be reduced.
 TwoSidedWireReference = tuple[Wire, Wire]
-
-# These two references --are two paris of wires-- allocated side by side,
-# unlike TwoSidedWireReference, as they reference to differentiated principal
-# ports.
 AuxPairWireReference = tuple[Wire, Wire]
 
 
@@ -122,12 +113,10 @@ class WireHeap:
     max_size: int = 1024 * 1024
 
     def alloc_node(self) -> Wire:
-        sys.audit("ivm.alloc", self)
         if self.free_head is not None:
             wire = self.free_head
             self.free_head = self.free_head.target
         else:
-            sys.audit("ivm.heap", self)
             if len(self.wires) < self.max_size:
                 wire = Wire()
                 self.wires.append(wire)
@@ -139,9 +128,8 @@ class WireHeap:
         return wire
 
     def free_wire(self, wire: Wire) -> None:
-        sys.audit("ivm.free_wire", self)
         wire.target = None
-        if wire.other_half.target is not None:
+        if wire.other_half.target is None:
             wire = wire.left_half
             wire.target = self.free_head
             self.free_head = wire

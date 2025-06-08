@@ -1,4 +1,6 @@
 import dataclasses
+import sys
+from io import StringIO, TextIOWrapper
 from typing import Any, Callable
 
 from ivm.extrinsics import ExtValPort, ExtFnPort
@@ -16,6 +18,9 @@ class Host:
     cache: ExtrinsicsCache = dataclasses.field(
         default_factory=lambda: ExtrinsicsCache()
     )
+    stdin: TextIOWrapper = dataclasses.field(default=sys.stdin)
+    stdout: TextIOWrapper = dataclasses.field(default=sys.stdout)
+    stderr: TextIOWrapper = dataclasses.field(default=sys.stderr)
 
     def __post_init__(self):
         self.cache.install_into(self.ivm.extrinsics)
