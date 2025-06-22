@@ -22,6 +22,7 @@ _P = TypeVar("_P", bound=Port)
 _Q = TypeVar("_Q", bound=Port)
 _BP = TypeVar("_BP", bound=BinaryNodePort)
 
+
 @dataclasses.dataclass
 class IVM(ExecutionContext):
     heap: WireHeap = field(default_factory=WireHeap)
@@ -124,7 +125,7 @@ class IVM(ExecutionContext):
         if _find_both_one_of(a, b, (GlobalPort, ErasePort)) or _find_both_one_of(
             a, b, (ExtValPort, ErasePort)
         ):
-            with self.track_interaction(a,b, "erase"):
+            with self.track_interaction(a, b, "erase"):
                 if isinstance(a, ExtValPort):
                     a.drop()
                 if isinstance(b, ExtValPort):
@@ -177,7 +178,6 @@ class IVM(ExecutionContext):
             self.copy(ports6[0], ports6[1])
             return
         assert False, "unreachable"
-
 
     def expand(self, a: GlobalPort, b: Port):
         with self.track_interaction(a, b, "expand"):

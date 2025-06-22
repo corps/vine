@@ -2,7 +2,16 @@ import dataclasses
 from typing import Protocol, Iterator, Callable
 
 from .extrinsics import ExtFnPort
-from .heap import Port, NilaryNodePort, Tag, WireHeap, CombPort, BranchPort, WirePort, Trace
+from .heap import (
+    Port,
+    NilaryNodePort,
+    Tag,
+    WireHeap,
+    CombPort,
+    BranchPort,
+    WirePort,
+    Trace, BinaryNodePort,
+)
 
 
 class ExecutionContext(Protocol):
@@ -12,9 +21,7 @@ class ExecutionContext(Protocol):
 
 
 class Instruction(Protocol):
-    def execute(
-        self, context: "ExecutionContext"
-    ) -> tuple[Port, Port] | None: ...
+    def execute(self, context: "ExecutionContext") -> tuple[Port, Port] | None: ...
 
 
 @dataclasses.dataclass
@@ -22,9 +29,7 @@ class Nilary(Instruction):
     register0: int
     port: NilaryNodePort
 
-    def execute(
-        self, context: ExecutionContext
-    ) -> tuple[Port, Port] | None:
+    def execute(self, context: ExecutionContext) -> tuple[Port, Port] | None:
         context.link_register(self.register0, self.port.fork())
         return None
 
@@ -38,10 +43,9 @@ class Binary(Instruction):
     register2: int
     trace: Trace | None
 
-    def execute(
-        self, context: ExecutionContext
-    ) -> tuple[Port, Port] | None:
+    def execute(self, context: ExecutionContext) -> tuple[Port, Port] | None:
         wire = context.heap.alloc_node()
+        port: BinaryNodePort
         if self.tag == Tag.Comb:
             port = CombPort(target=wire, label=self.label, trace=self.trace)
         elif self.tag == Tag.Branch:
@@ -59,9 +63,7 @@ class Inert(Instruction):
     register0: int
     register1: int
 
-    def execute(
-        self, context: ExecutionContext
-    ) -> tuple[Port, Port] | None:
+    def execute(self, context: ExecutionContext) -> tuple[Port, Port] | None:
         wires = context.heap.new_wires()
         context.link_register(self.register0, WirePort(wire=wires[0][0]))
         context.link_register(self.register1, WirePort(wire=wires[1][0]))

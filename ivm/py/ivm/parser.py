@@ -161,15 +161,30 @@ class IvyParser:
             source = self.state.lexer.take_source(start_pos, end_pos)
 
             for t in net:
-                if not isinstance(t.trace, SpanInfo): continue
+                if not isinstance(t.trace, SpanInfo):
+                    continue
                 t.trace = SourceInfo(
-                    head_span=(t.trace.head_span[0] - start_pos[0], (t.trace.head_span[1][0] - start_pos[1][0], t.trace.head_span[1][1] - start_pos[1][0])),
-                    row_span=(t.trace.row_span[0] - start_pos[0], t.trace.row_span[1] - start_pos[0]),
-                    col_span=(
-                        t.trace.col_span[0] - start_pos[1][0] if t.trace.row_span[0] == start_pos[0] else t.trace.col_span[0],
-                        t.trace.col_span[1]
+                    head_span=(
+                        t.trace.head_span[0] - start_pos[0],
+                        (
+                            t.trace.head_span[1][0] - start_pos[1][0],
+                            t.trace.head_span[1][1] - start_pos[1][0],
+                        ),
                     ),
-                    containing_net_name=name, containing_net_source=source
+                    row_span=(
+                        t.trace.row_span[0] - start_pos[0],
+                        t.trace.row_span[1] - start_pos[0],
+                    ),
+                    col_span=(
+                        (
+                            t.trace.col_span[0] - start_pos[1][0]
+                            if t.trace.row_span[0] == start_pos[0]
+                            else t.trace.col_span[0]
+                        ),
+                        t.trace.col_span[1],
+                    ),
+                    containing_net_name=name,
+                    containing_net_source=source,
                 )
 
             nets[name] = net
@@ -297,7 +312,7 @@ class IvyParser:
             self.state.eat(open_bracket, require=True)
             inner = self.parse_tree()
             self.state.eat(close_bracket, require=True)
-            return BlackBox(inner, lambda: None)
+            return BlackBox(inner, None)
 
         raise SyntaxError(
             f"Unexpected token {self.state.last_token}", self.state.lexer.position

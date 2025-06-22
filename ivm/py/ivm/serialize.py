@@ -89,7 +89,9 @@ def serialize_net(ivm: IVM, net: Net, name: str, gs: dict[str, Global]):
         if isinstance(tree, Erase):
             instructions.append(Nilary(to, ErasePort(trace=tree.trace)))
         elif isinstance(tree, (N32Node, F32Node)):
-            instructions.append(Nilary(to, PrimitiveExtValPort(value=tree.value, trace=tree.trace)))
+            instructions.append(
+                Nilary(to, PrimitiveExtValPort(value=tree.value, trace=tree.trace))
+            )
         elif isinstance(tree, CombNode):
             a = serialize_tree(tree.left)
             b = serialize_tree(tree.right)

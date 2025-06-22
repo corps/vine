@@ -1,6 +1,8 @@
 import regex as re
 from dataclasses import dataclass, field
-from typing import Pattern, Iterator
+from typing import Iterator
+
+from regex import Pattern
 
 
 @dataclass
@@ -62,9 +64,17 @@ class Lexer:
     lines: list[str]
     position: tuple[int, tuple[int, int]] = (0, (0, 0))
 
-    def take_source(self, start_pos: tuple[int, tuple[int, int]], end_pos: tuple[int, tuple[int, int]]) -> list[str]:
+    def take_source(
+        self,
+        start_pos: tuple[int, tuple[int, int]],
+        end_pos: tuple[int, tuple[int, int]],
+    ) -> list[str]:
         return [
-            self.lines[line_idx][(0 if line_idx != start_pos[0] else start_pos[1][0]):(-1 if line_idx != end_pos[0] else end_pos[1][1])]
+            self.lines[line_idx][
+                (0 if line_idx != start_pos[0] else start_pos[1][0]) : (
+                    -1 if line_idx != end_pos[0] else end_pos[1][1]
+                )
+            ]
             for line_idx in range(start_pos[0], end_pos[0])
         ]
 
@@ -73,52 +83,45 @@ class Lexer:
         while ln < len(self.lines):
             line = self.lines[ln]
             i = p.finditer(line, pos=self.position[1][1])
-            while True:
-                for match in i:
-                    group_match, token = next(
-                        (i, a) for i, a in enumerate(match.groups()) if a is not None
-                    )
-                    if group_match == open_comment:
-                        depth = 1
-                        start_ln = ln
-                        while True:
-                            for match in p_in_comment.finditer(line, match.end()):
-                                group_match, token = next(
-                                    (i, a)
-                                    for i, a in enumerate(match.groups())
-                                    if a is not None
-                                )
-                                if group_match == in_open_comment:
-                                    depth += 1
-                                elif group_match == in_close_comment:
-                                    depth -= 1
-                                if depth == 0:
-                                    i = p.finditer(line, match.end())
-                                    break
-                            else:
-                                pair = next(line_iter, None)
-                                if pair is None:
-                                    raise SyntaxError(
-                                        f"Could not find terminating close comment, starting from line {start_ln + 1}"
-                                    )
-                                else:
-                                    ln, line = pair
-                                continue
-                            break
-                        break
-                    elif group_match in skips:
-                        continue
-                    elif group_match == other:
+            for match in i:
+                group_match, token = next(
+                    (i, a) for i, a in enumerate(match.groups()) if a is not None
+                )
+                if group_match == open_comment:
+                    depth = 1
+                    start_ln = ln
+                    while depth > 0 and ln < len(self.lines):
+                        for match in p_in_comment.finditer(line, match.end()):
+                            group_match, token = next(
+                                (i, a)
+                                for i, a in enumerate(match.groups())
+                                if a is not None
+                            )
+                            self.position = (ln, match.span())
+                            if group_match == in_open_comment:
+                                depth += 1
+                            elif group_match == in_close_comment:
+                                depth -= 1
+                            if depth == 0:
+                                break
+                        if depth > 0:
+                            ln += 1
+                    if depth > 0:
                         raise SyntaxError(
-                            f"Unexpected token {token} on line {ln + 1} position {match.span()} {len(top_level.tokens)} {len(match.groups())}"
+                            f"Could not find terminating close comment, starting from line {start_ln + 1}"
                         )
-                    else:
-                        self.position = (ln, match.span())
-                        yield group_match, token
-                else:
                     break
-
-            self.position = ((ln := ln + 1), (0, 0))
+                elif group_match in skips:
+                    continue
+                elif group_match == other:
+                    raise SyntaxError(
+                        f"Unexpected token {token} on line {ln + 1} position {match.span()} {len(top_level.tokens)} {len(match.groups())}"
+                    )
+                else:
+                    self.position = (ln, match.span())
+                    yield group_match, token
+            else:
+                self.position = ((ln := ln + 1), (0, 0))
 
 
 def test_tokenize():

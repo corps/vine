@@ -51,7 +51,6 @@ class Tree(abc.ABC):
     def head(self) -> str: ...
 
 
-
 @dataclasses.dataclass
 class Erase(Tree):
     trace: Trace | None
@@ -62,7 +61,9 @@ class Erase(Tree):
     __repr__ = __str__
 
     has_children: bool = False
-    def __iter__(self) -> Iterator[Tree]: return iter(())
+
+    def __iter__(self) -> Iterator[Tree]:
+        return iter(())
 
     def head(self) -> str:
         return str(self)
@@ -87,8 +88,10 @@ class CombNode(Tree):
         yield self.right
 
     has_children: bool = True
+
     def head(self) -> str:
         return self.label
+
 
 @dataclasses.dataclass
 class ExtFnNode(Tree):
@@ -109,6 +112,7 @@ class ExtFnNode(Tree):
         yield self.right
 
     has_children: bool = True
+
     def head(self) -> str:
         return "@" + self.label
 
@@ -189,6 +193,7 @@ class VarNode(Tree):
 
     def head(self) -> str:
         return self.name
+
 
 @dataclasses.dataclass
 class GlobalNode(Tree):

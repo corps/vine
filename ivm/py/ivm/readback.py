@@ -15,7 +15,8 @@ from .tree import (
     N32Node,
     F32Node,
     ExtFnNode,
-    BranchNode, CombNode,
+    BranchNode,
+    CombNode,
 )
 from .vm import IVM
 
@@ -89,20 +90,38 @@ class Reader:
             raise NotImplementedError(f"Unknown ExtValPort type {type(p)}")
         elif isinstance(p, CombPort):
             p1, p2 = p.aux()
-            return CombNode(p.label, self.read_wire(p1, shallow), self.read_wire(p2, shallow), p.trace)
+            return CombNode(
+                p.label,
+                self.read_wire(p1, shallow),
+                self.read_wire(p2, shallow),
+                p.trace,
+            )
         elif isinstance(p, ExtFnPort):
             p1, p2 = p.aux()
-            return ExtFnNode(p.label, self.read_wire(p1, shallow), self.read_wire(p2, shallow), p.trace)
+            return ExtFnNode(
+                p.label,
+                self.read_wire(p1, shallow),
+                self.read_wire(p2, shallow),
+                p.trace,
+            )
         elif isinstance(p, BranchPort):
             p1, p2 = p.aux()
             bp = self.ivm.follow(WirePort(wire=p1), destructive=False)
             if isinstance(bp, BranchPort):
                 p11, p12 = bp.aux()
                 return BranchNode(
-                    self.read_wire(p11, shallow), self.read_wire(p12, shallow), self.read_wire(p2, shallow), p.trace
+                    self.read_wire(p11, shallow),
+                    self.read_wire(p12, shallow),
+                    self.read_wire(p2, shallow),
+                    p.trace,
                 )
             else:
-                return CombNode("?^", self.read_wire(p1, shallow), self.read_wire(p2, shallow), p.trace)
+                return CombNode(
+                    "?^",
+                    self.read_wire(p1, shallow),
+                    self.read_wire(p2, shallow),
+                    p.trace,
+                )
         else:
             raise NotImplementedError(f"Unknown type {type(p)}")
 

@@ -2,12 +2,14 @@ import dataclasses
 import enum
 from typing import Any, ClassVar, Optional, Callable
 
+
 # TODO: Move these into distinct file
 @dataclasses.dataclass
 class SpanInfo:
     head_span: tuple[int, tuple[int, int]]
     row_span: tuple[int, int]
     col_span: tuple[int, int]
+
 
 @dataclasses.dataclass
 class SourceInfo(SpanInfo):
@@ -17,7 +19,9 @@ class SourceInfo(SpanInfo):
     row_span: tuple[int, int]
     col_span: tuple[int, int]
 
+
 Trace = SourceInfo | SpanInfo
+
 
 class Wire:
     other_half: "Wire"
@@ -118,7 +122,6 @@ class BranchPort(BinaryNodePort):
     tag: Tag = Tag.Branch
     trace: Trace | None = None
 
-
 @dataclasses.dataclass
 class WireHeap:
     wires: list[Wire] = dataclasses.field(default_factory=list)
@@ -128,7 +131,7 @@ class WireHeap:
     def alloc_node(self) -> Wire:
         if self.free_head is not None:
             wire = self.free_head
-            self.free_head = self.free_head.target
+            self.free_head = self.free_head.target # type: ignore
         else:
             if len(self.wires) < self.max_size:
                 wire = Wire()

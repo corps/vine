@@ -45,7 +45,7 @@ class ExtFnPort(BinaryNodePort):
 
     def unwrap_label(self) -> str:
         if self.swapped:
-            return self.label[1:]
+            return self.label[:-1]
         else:
             return self.label
 
