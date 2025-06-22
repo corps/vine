@@ -62,6 +62,12 @@ class Lexer:
     lines: list[str]
     position: tuple[int, tuple[int, int]] = (0, (0, 0))
 
+    def take_source(self, start_pos: tuple[int, tuple[int, int]], end_pos: tuple[int, tuple[int, int]]) -> list[str]:
+        return [
+            self.lines[line_idx][(0 if line_idx != start_pos[0] else start_pos[1][0]):(-1 if line_idx != end_pos[0] else end_pos[1][1])]
+            for line_idx in range(start_pos[0], end_pos[0])
+        ]
+
     def tokenize(self) -> Iterator[tuple[int, str]]:
         ln = self.position[0]
         while ln < len(self.lines):

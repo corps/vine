@@ -2,7 +2,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import overload, Literal
 
-from .heap import Trace
+from .heap import Trace, SourceInfo, SpanInfo
 from .tree import (
     Net,
     Tree,
@@ -112,11 +112,6 @@ class IvyParser:
                 ),
             )
 
-    def tracer(
-        self, name: str, line_extent: tuple[int, int], col_extent: tuple[int, int]
-    ) -> Trace:
-        return self.state.source_file, name, line_extent, col_extent
-
     def parse_u32_like(self, token: str) -> N32:
         if token.startswith("0b"):
             token = token[2:]
@@ -159,9 +154,26 @@ class IvyParser:
 
     def parse_nets(self) -> Nets:
         nets: Nets = OrderedDict()
+        start_pos = self.state.lexer.position
         while name := self.state.eat(global_, require=False):
             net = self.parse_net()
+            end_pos = self.state.lexer.position
+            source = self.state.lexer.take_source(start_pos, end_pos)
+
+            for t in net:
+                if not isinstance(t.trace, SpanInfo): continue
+                t.trace = SourceInfo(
+                    head_span=(t.trace.head_span[0] - start_pos[0], (t.trace.head_span[1][0] - start_pos[1][0], t.trace.head_span[1][1] - start_pos[1][0])),
+                    row_span=(t.trace.row_span[0] - start_pos[0], t.trace.row_span[1] - start_pos[0]),
+                    col_span=(
+                        t.trace.col_span[0] - start_pos[1][0] if t.trace.row_span[0] == start_pos[0] else t.trace.col_span[0],
+                        t.trace.col_span[1]
+                    ),
+                    containing_net_name=name, containing_net_source=source
+                )
+
             nets[name] = net
+            start_pos = end_pos
         return nets
 
     def parse_net(self) -> Net:
@@ -183,29 +195,29 @@ class IvyParser:
         if self.state.check(n32):
             return N32Node(
                 self.parse_u32_like(self.state.eat(n32, require=True)),
-                self.tracer(
-                    "n32",
-                    line_extent=(start_pos[0], start_pos[0]),
-                    col_extent=start_pos[1],
+                SpanInfo(
+                    head_span=start_pos,
+                    row_span=(start_pos[0], start_pos[0]),
+                    col_span=start_pos[1],
                 ),
             )
         elif self.state.check(f32):
             return F32Node(
                 self.parse_f32_like(self.state.eat(f32, require=True)),
-                self.tracer(
-                    "f32",
-                    line_extent=(start_pos[0], start_pos[0]),
-                    col_extent=start_pos[1],
+                SpanInfo(
+                    head_span=start_pos,
+                    row_span=(start_pos[0], start_pos[0]),
+                    col_span=start_pos[1],
                 ),
             )
         elif self.state.check(global_):
             global_name = self.state.eat(global_, require=True)
             return GlobalNode(
                 global_name,
-                self.tracer(
-                    global_name,
-                    line_extent=(start_pos[0], start_pos[0]),
-                    col_extent=start_pos[1],
+                SpanInfo(
+                    head_span=start_pos,
+                    row_span=(start_pos[0], start_pos[0]),
+                    col_span=start_pos[1],
                 ),
             )
         elif self.state.check(ident_):
@@ -219,19 +231,19 @@ class IvyParser:
                     ident,
                     a,
                     b,
-                    self.tracer(
-                        ident,
-                        line_extent=(start_pos[0], end_pos[0]),
-                        col_extent=(start_pos[1][0], end_pos[1][1]),
+                    SpanInfo(
+                        head_span=start_pos,
+                        row_span=(start_pos[0], end_pos[0]),
+                        col_span=(start_pos[1][0], end_pos[1][1]),
                     ),
                 )
             else:
                 return VarNode(
                     ident,
-                    self.tracer(
-                        ident,
-                        line_extent=(start_pos[0], start_pos[0]),
-                        col_extent=start_pos[1],
+                    SpanInfo(
+                        head_span=start_pos,
+                        row_span=(start_pos[0], start_pos[0]),
+                        col_span=start_pos[1],
                     ),
                 )
 
@@ -247,10 +259,10 @@ class IvyParser:
                 ident + ("$" if swapped else ""),
                 a,
                 b,
-                self.tracer(
-                    ident,
-                    line_extent=(start_pos[0], end_pos[0]),
-                    col_extent=(start_pos[1][0], end_pos[1][1]),
+                SpanInfo(
+                    head_span=start_pos,
+                    row_span=(start_pos[0], end_pos[0]),
+                    col_span=(start_pos[1][0], end_pos[1][1]),
                 ),
             )
 
@@ -265,19 +277,19 @@ class IvyParser:
                 a,
                 b,
                 c,
-                self.tracer(
-                    "branch",
-                    line_extent=(start_pos[0], end_pos[0]),
-                    col_extent=(start_pos[1][0], end_pos[1][1]),
+                SpanInfo(
+                    head_span=start_pos,
+                    row_span=(start_pos[0], end_pos[0]),
+                    col_span=(start_pos[1][0], end_pos[1][1]),
                 ),
             )
 
         if self.state.eat(hole, require=False):
             return Erase(
-                self.tracer(
-                    "erase",
-                    line_extent=(start_pos[0], start_pos[0]),
-                    col_extent=start_pos[1],
+                SpanInfo(
+                    head_span=start_pos,
+                    row_span=(start_pos[0], start_pos[0]),
+                    col_span=start_pos[1],
                 )
             )
 

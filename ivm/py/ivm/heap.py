@@ -2,9 +2,22 @@ import dataclasses
 import enum
 from typing import Any, ClassVar, Optional, Callable
 
-SourceInfo = tuple[str, str, tuple[int, int], tuple[int, int]]
-Trace = SourceInfo | Callable[[], None]
+# TODO: Move these into distinct file
+@dataclasses.dataclass
+class SpanInfo:
+    head_span: tuple[int, tuple[int, int]]
+    row_span: tuple[int, int]
+    col_span: tuple[int, int]
 
+@dataclasses.dataclass
+class SourceInfo(SpanInfo):
+    head_span: tuple[int, tuple[int, int]]
+    containing_net_name: str
+    containing_net_source: list[str]
+    row_span: tuple[int, int]
+    col_span: tuple[int, int]
+
+Trace = SourceInfo | SpanInfo
 
 class Wire:
     other_half: "Wire"
@@ -23,10 +36,9 @@ class Wire:
 
     def load_target(self) -> Optional["Port"]:
         port = self.target
-        if port is None or isinstance(port, Wire):
+        if not isinstance(port, Port):
             return None
 
-        assert isinstance(port, Port), port
         return port
 
     def swap_target(self, port: "Port") -> Optional["Port"]:
@@ -68,6 +80,7 @@ class NilaryNodePort(Port):
 @dataclasses.dataclass
 class ErasePort(NilaryNodePort):
     tag: Tag = Tag.Erase
+    trace: Trace | None = None
 
 
 Port.ERASE = ErasePort()

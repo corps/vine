@@ -12,7 +12,10 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-dependencies = ["regex"]
+dependencies = ["regex", "textual"]
+
+[project.scripts]
+my-app = "ivm.runner:main"
 
 [project.urls]
 Homepage = "https://vine.dev"
@@ -23,7 +26,6 @@ dev = [
     "pytest",
     "black",
     "mypy",
-    "flake8",
 ]
 
 [tool.setuptools.packages.find]

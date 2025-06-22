@@ -1,9 +1,9 @@
 import dataclasses
 import sys
-from io import StringIO, TextIOWrapper
+from io import TextIOWrapper
 from typing import Any, Callable
 
-from ivm.extrinsics import ExtValPort, ExtFnPort
+from ivm.extrinsics import ExtValPort
 from ivm.globals import Global
 from ivm.parser import IvyParser
 from ivm.readback import ExtrinsicsCache
@@ -18,9 +18,9 @@ class Host:
     cache: ExtrinsicsCache = dataclasses.field(
         default_factory=lambda: ExtrinsicsCache()
     )
-    stdin: TextIOWrapper = dataclasses.field(default=sys.stdin)
-    stdout: TextIOWrapper = dataclasses.field(default=sys.stdout)
-    stderr: TextIOWrapper = dataclasses.field(default=sys.stderr)
+    stdout: TextIOWrapper = sys.stdout
+    stderr: TextIOWrapper = sys.stderr
+    stdin: TextIOWrapper = sys.stdin
 
     def __post_init__(self):
         self.cache.install_into(self.ivm.extrinsics)
@@ -34,6 +34,9 @@ class Host:
     def parse_file(self, filename: str):
         self.gs = insert_nets(self.ivm, IvyParser.from_file(filename).parse_nets())
 
-    def execute(self, global_name: str, value: ExtValPort) -> None:
+    def boot(self, global_name: str, value: ExtValPort) -> None:
         self.ivm.boot(self.gs[global_name], value)
-        self.ivm.normalize()
+
+    def execute(self) -> None:
+        for _ in self.ivm.normalize():
+            pass

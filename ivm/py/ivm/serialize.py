@@ -14,7 +14,7 @@ from .tree import (
 )
 from .extrinsics import PrimitiveExtValPort
 from .globals import Global, Nilary, Binary, GlobalPort, Inert
-from .heap import Port, Tag
+from .heap import Port, Tag, ErasePort
 from .vm import IVM
 
 
@@ -87,7 +87,7 @@ def serialize_net(ivm: IVM, net: Net, name: str, gs: dict[str, Global]):
     def serialize_tree_to(fr: Tree, to: int):
         tree = unbox(fr)
         if isinstance(tree, Erase):
-            instructions.append(Nilary(to, Port.ERASE))
+            instructions.append(Nilary(to, ErasePort(trace=tree.trace)))
         elif isinstance(tree, (N32Node, F32Node)):
             instructions.append(Nilary(to, PrimitiveExtValPort(value=tree.value, trace=tree.trace)))
         elif isinstance(tree, CombNode):
